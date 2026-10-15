@@ -131,13 +131,14 @@ export default function Viewer({ parts, pocketW, mode, autoRotate }: Props) {
       const plate = meshes.get('backPlate')!;
       plate.position.z = C.lip;
       const stand = meshes.get('stand')!;
-      // stand: its x points away from the frame back, its thickness runs along frame x
+      // stand (exported turned over for printing): its -x points away from the frame
+      // back, its thickness runs along frame x
       // (a rotation, not a mirror, so the triangles keep facing outward)
       stand.matrixAutoUpdate = false;
       stand.matrix.set(
-        0, 0, -1, pocketW / 2 + C.finThickness / 2,
+        0, 0, 1, pocketW / 2 - C.finThickness / 2,
         0, 1, 0, 0,
-        1, 0, 0, C.depth - 4.84,
+        -1, 0, 0, C.depth - 4.84,
         0, 0, 0, 1,
       );
       inner.add(meshes.get('frame')!, plate, stand);

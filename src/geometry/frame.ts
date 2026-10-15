@@ -29,12 +29,18 @@ export const C = {
   plateGap: 0.2, // back plate clearance per side
   plateThickness: 1.52,
   plateNotchR: 3.86, // finger notch to pry the back plate out
-  finThickness: 5.08,
-  finWall: 6, // rim left around the stand's lightening windows
-  finStrut: 5,
+  plateRim: 9.525, // back plate is lightened down to a 3/8" rim...
+  plateBar: 9.525, // ...and an X of 3/8" bars across the middle
+  plateRound: 2,
+  finThickness: 5.08, // the snap tabs keep the original thickness
+  finBody: 3, // the rest of the fin is thinner
+  finWall: 4, // rim left around the stand's lightening windows
+  finStrut: 4,
   finRound: 4,
-  finKeepX: 15, // stand edge that sits on the frame stays solid
+  finKeepX: 10, // stand edge that sits on the frame stays solid
   finSlotX: 12, // tab features occupy x < finSlotX
+  finArch: 0.25, // bottom edge arches up between heel and foot, rise / span
+  finFoot: 0.88, // the arch ends here along the bottom edge (heel 0, foot 1)
   // The original stand was made for clips 101.15 mm apart (a 3.75" pocket).
   baseClipSpan: 101.15,
 };
@@ -96,10 +102,27 @@ export function build(wasm: ManifoldToplevel, p: FrameParams): Result {
   const clipTop = feature(features.clipTop).translate([w / 2, h + C.clipOffset, 0]);
   frame = Manifold.union([frame, clipBottom, clipTop]);
 
-  // ---- back plate (sits in the pocket) with a finger notch on the left edge
+  // ---- back plate (sits in the pocket) with a finger notch on the left edge,
+  // lightened to a rim and an X across the middle
   const g = C.plateGap;
   const notch = CrossSection.circle(C.plateNotchR, 48).translate([g, h / 2]);
-  const plate2d = CrossSection.square([w - 2 * g, h - 2 * g]).translate([g, g]).subtract(notch);
+  const r = g + C.plateRim;
+  const iw = w - 2 * r;
+  const ih = h - 2 * r;
+  const bar = (angle: number) =>
+    CrossSection.square([Math.hypot(iw, ih) + 4 * C.plateBar, C.plateBar], true).rotate(angle).translate([w / 2, h / 2]);
+  const diag = (Math.atan2(ih, iw) * 180) / Math.PI;
+  let plate2d = CrossSection.square([w - 2 * g, h - 2 * g]).translate([g, g]).subtract(notch);
+  if (iw > 0 && ih > 0) {
+    const holes = CrossSection.square([iw, ih])
+      .translate([r, r])
+      .subtract(bar(diag))
+      .subtract(bar(-diag))
+      .offset(-C.plateRound, 'Round', 2, 24)
+      .offset(C.plateRound, 'Round', 2, 24);
+    const pieces = holes.decompose().filter((c) => c.area() > 40);
+    if (pieces.length) plate2d = plate2d.subtract(CrossSection.compose(pieces));
+  }
   const backPlate = Manifold.extrude(plate2d, C.plateThickness);
 
   // ---- fin stand
@@ -116,10 +139,15 @@ export function build(wasm: ManifoldToplevel, p: FrameParams): Result {
 }
 
 /**
- * The stand is a flat fin, printed lying down. Its x axis points away from the
- * frame's back, y runs up the frame. The tabs at x < 12 snap into the clips;
- * the bottom edge sets the lean (about 15 degrees), which stays the same at
- * every size while the stand's depth grows with its height.
+ * The stand is a flat fin, printed lying down. It is modelled with its x axis
+ * pointing away from the frame's back and y running up the frame. The tabs at
+ * x < 12 snap into the clips; the heel by the bottom tab and the foot set the
+ * lean (about 15 degrees), which stays the same at every size while the
+ * stand's depth grows with its height. Between them the bottom edge arches up.
+ *
+ * The finished part is turned over for printing, (x, y, z) -> (-x, y, T - z),
+ * so the snap hooks (in the upper half of the original tabs) sit on the bed
+ * instead of overhanging, and the thinner body lies flat on the bed too.
  */
 function buildStand(
   wasm: ManifoldToplevel,
@@ -135,6 +163,21 @@ function buildStand(
     anchor[0] + k * (x - anchor[0]),
     anchor[1] + k * (y - anchor[1]),
   ];
+  // bottom edge: flat at the heel (up to the tab) and the foot, arched between
+  const foot = tip(51.32, 6.02);
+  const dir = [foot[0] - anchor[0], foot[1] - anchor[1]];
+  const span = Math.hypot(dir[0], dir[1]);
+  const up = [-dir[1] / span, dir[0] / span];
+  const s0 = (C.finSlotX - anchor[0]) / dir[0];
+  const s1 = C.finFoot;
+  const rise = C.finArch * (s1 - s0) * span;
+  const arch: [number, number][] = [];
+  for (let i = 24; i >= 0; i--) {
+    const t = i / 24;
+    const s = s0 + (s1 - s0) * t;
+    const lift = rise * Math.sin(Math.PI * t);
+    arch.push([anchor[0] + s * dir[0] + lift * up[0], anchor[1] + s * dir[1] + lift * up[1]]);
+  }
   const outline: [number, number][] = [
     [4.84, 0.3],
     [4.84, 94.95 + d],
@@ -144,15 +187,18 @@ function buildStand(
     tip(54.96, 10.94),
     tip(55.05, 10.58),
     tip(55.94, 7.26),
-    tip(51.32, 6.02),
+    foot,
+    ...arch,
     anchor,
     [9, 0.3],
   ];
   const T = C.finThickness;
   const shape = new CrossSection([outline], 'NonZero');
 
-  // Swap the plain slab at both ends for the snap tabs from the original.
-  let fin: MF = Manifold.extrude(shape, T)
+  // Thin body flush with the z = T face (the bed side once turned over);
+  // swap the slab at both ends for the full-thickness snap tabs.
+  let fin: MF = Manifold.extrude(shape, C.finBody)
+    .translate([0, 0, T - C.finBody])
     .subtract(box(-10, -20, -1, C.finSlotX, 10, T + 1))
     .subtract(box(-10, 85 + d, -1, C.finSlotX, 200 + d, T + 1));
   fin = Manifold.union([fin, feature(features.tabBottom), feature(features.tabTop).translate([0, d, 0])]);
@@ -161,9 +207,15 @@ function buildStand(
   // leaving the edge against the frame solid; corners rounded.
   const [, y0, , y1] = boundsOf(outline);
   const n = Math.max(1, Math.round((y1 - y0) / 55));
+  // and a rounded margin around both tabs
+  const tabZones = CrossSection.union([
+    CrossSection.square([C.finSlotX + 100, 110]).translate([-100, -100]),
+    CrossSection.square([C.finSlotX + 100, 300]).translate([-100, 85 + d]),
+  ]).offset(C.finWall, 'Round', 2, 24);
   let windows = shape
     .offset(-C.finWall, 'Miter')
-    .subtract(CrossSection.square([C.finKeepX + 100, 1000]).translate([-100, -500]));
+    .subtract(CrossSection.square([C.finKeepX + 100, 1000]).translate([-100, -500]))
+    .subtract(tabZones);
   for (let i = 1; i <= n; i++) {
     const y = y0 + ((y1 - y0) * i) / (n + 1);
     windows = windows.subtract(CrossSection.square([1000, C.finStrut]).translate([-500, y - C.finStrut / 2]));
@@ -172,7 +224,8 @@ function buildStand(
   // drop slivers too small to be worth cutting
   const pieces = windows.decompose().filter((c) => c.area() > 40);
   if (pieces.length) fin = fin.subtract(Manifold.extrude(CrossSection.compose(pieces), T + 2).translate([0, 0, -1]));
-  return fin;
+  // turn it over for printing
+  return fin.rotate([0, 180, 0]).translate([0, 0, T]);
 }
 
 function boundsOf(pts: [number, number][]) {

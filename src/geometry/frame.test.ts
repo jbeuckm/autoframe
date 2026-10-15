@@ -24,9 +24,33 @@ describe('build', () => {
     expect(r.frame.volume()).toBeCloseTo(19677, -2);
     const bb = r.frame.boundingBox();
     expect(bb.max[2]).toBeCloseTo(8.7, 1); // clips stand above the back
-    // lightened stand is well under the original 16414 mm^3
-    expect(r.stand.volume()).toBeLessThan(12000);
-    expect(r.stand.volume()).toBeGreaterThan(8000);
+    // thin, lightened stand is well under the original 16414 mm^3
+    expect(r.stand.volume()).toBeLessThan(6500);
+    expect(r.stand.volume()).toBeGreaterThan(3500);
+    // back plate is cut down to a rim and an X: well under the solid plate
+    const solid = (r.pocket.w - 0.4) * (r.pocket.h - 0.4) * 1.52;
+    expect(r.backPlate.volume()).toBeLessThan(0.6 * solid);
+  });
+
+  it('prints the stand without overhangs', () => {
+    const m = build(wasm, original).stand;
+    expect(m.boundingBox().min[2]).toBeCloseTo(0);
+    // area of steep down-facing triangles above the bed (only the hooks'
+    // tiny 0.26 mm edge fillet remains)
+    const mesh = m.getMesh();
+    const v = mesh.vertProperties;
+    const t = mesh.triVerts;
+    const n = mesh.numProp;
+    let area = 0;
+    for (let i = 0; i < t.length; i += 3) {
+      const P = [0, 1, 2].map((k) => [v[t[i + k] * n], v[t[i + k] * n + 1], v[t[i + k] * n + 2]]);
+      const a = P[1].map((x, j) => x - P[0][j]);
+      const b = P[2].map((x, j) => x - P[0][j]);
+      const c = [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+      const len = Math.hypot(c[0], c[1], c[2]);
+      if (len && c[2] / len < -0.7 && Math.min(P[0][2], P[1][2], P[2][2]) > 0.05) area += len / 2;
+    }
+    expect(area).toBeLessThan(2);
   });
 
   it('builds portrait and large frames as single solids', () => {

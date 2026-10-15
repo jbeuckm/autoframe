@@ -7,9 +7,12 @@ landscape. You get three STL files:
 - **frame**: printed face-down. It has a 1/4" border around the picture
   pocket and two snap clips on the back.
 - **back plate**: drops into the pocket behind the picture, with a finger
-  notch for prying it out.
-- **fin stand**: printed flat. It snaps into the clips and leans the frame
-  back about 15°. Its middle is cut away to save material.
+  notch for prying it out. It is cut down to a 3/8" rim and a 3/8" X across
+  the middle.
+- **fin stand**: printed flat, hook side down so the snap tabs don't
+  overhang. It snaps into the clips and leans the frame back about 15°. Its
+  bottom edge arches up, so it touches the table only at the snap tab and
+  the foot. Its middle is cut away to save material.
 
 The parts render in 3D (assembled or as a print layout, auto-rotating), and
 **Export STL** downloads all three in a zip. You can also download one part
@@ -38,5 +41,6 @@ npm run build      # typecheck + production build in dist/
   clips move to the short edges and the stand gets taller and deeper to
   match. The lean angle stays the same.
 - Fixed dimensions: border 6.35 mm, front lip 1.59 mm, frame depth 5.14 mm,
-  back plate 1.52 mm with 0.2 mm clearance per side, stand 5.08 mm thick.
+  back plate 1.52 mm with 0.2 mm clearance per side, stand 3 mm thick
+  (5.08 mm at the snap tabs).
   They're in the `C` constants in `frame.ts`.
